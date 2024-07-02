@@ -1,0 +1,84 @@
+//The below function is used for getting the sensor resistance value in free air. As the Analog channel 0 is used, it is getting data from the analog channel 0. This is for calibrating the MQ Gas sensor.
+
+float SensorCalibration(){
+  int count;                                              // This function will calibrate the sensor in free air
+  float val=0;
+  for (count=0;count<50;count++) {                   //take multiple samples and calculate the average value
+                val += calculate_resistance(ADC_Read(0));
+                __delay_ms(500);
+  }
+  val = val/50;                         
+  val = val/RO_VALUE_CLEAN_AIR;                              //divided by RO_CLEAN_AIR_FACTOR yields the Ro                                                                     
+  return val;
+}
+
+//Below Function is used to read the MQ sensor analog values and average it to calculate the Rs value
+
+float read_MQ()
+{
+  int count;
+  float rs=0;
+  for (count=0;count<5;count++) { // take multiple readings and average it.
+                rs += calculate_resistance(ADC_Read(0));   // rs changes according to gas concentration.
+                __delay_ms(50);
+  }
+  rs = rs/5;
+
+  return rs;  
+}
+
+//The below function is used to calculate the resistance from the voltage divider resistor and the load resistance.
+
+float calculate_resistance(int adc_channel)
+{                                                               // sensor and load resistor forms a voltage divider. so using analog value and load value
+  return ( ((float)RL_VALUE*(1023-adc_channel)/adc_channel));            // we will find sensor resistor.
+}
+The RL_VALUE is defined at the starting of the code like shown below
+#define RL_VALUE (10)    //define the load resistance on the board, in kilo-ohms
+
+//Change this value after checking the onboard load resistance. It can be different in other MQ sensor boards. To plot the available data into the log scale, the below function is used.
+
+int gas_plot_log_scale(float rs_ro_ratio, float *curve)
+{
+                return pow(10,(((log(rs_ro_ratio)-curve[1])/curve[2]) + curve[0]));  
+}
+
+//The curve is the LPG curve defined in above of the code that is previously calculated in our article above.
+
+float MQ6_curve[3]  = {2.3,0.30,-0.41};   //Graph Plot, change this for particular sensor
+
+//Finally, the main function inside which we measure the analog value, calculate the PPM and display it on the LCD is given below
+
+void main() {  
+                system_init();
+                clear_screen();
+                lcd_com(FIRST_LINE);
+                lcd_puts("Calibrating....");
+                Ro = SensorCalibration();
+                //clear_screen();
+                lcd_com(FIRST_LINE);      
+                lcd_puts("Done!                   ");
+                //clear_screen();
+                lcd_com(FIRST_LINE);
+                lcd_print_number(Ro);
+                lcd_puts(" K Ohms");
+                __delay_ms(1500);
+                gas_detect = 0;
+ while(1){
+                if(gas_detect == 0){              
+                lcd_com(FIRST_LINE);
+                lcd_puts("Gas is present  ");
+                lcd_com(SECOND_LINE);
+                lcd_puts ("Gas ppm = ");
+                float rs = read_MQ();
+                float ratio = rs/Ro;
+                lcd_print_number(gas_plot_log_scale(ratio, MQ6_curve));
+                __delay_ms(1500);
+                clear_screen();
+                }
+                else{
+                lcd_com(FIRST_LINE);
+                lcd_puts("Gas not present  ");
+                }
+                }
+}
